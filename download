@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+
+if [ ! -f ".env" ]; then
+    echo "Fill out the .env file"
+    cp ".env_example" ".env"
+    exit 0
+fi
+
+source .env
+
+if [[ $# -eq 0 ]]; then
+    echo "Usage: ./download com.example:package:version [extra1] [...] [extraN]"
+    echo "By default the script will try to download .pom, .jar, and -sources.jar file"
+    echo "Add extra suffixes to download, e.g."
+    echo "    ./download com.example:package:version -api.jar .zip"
+    exit 0
+fi
+
+_curl() {
+    curl "${CURL_ARGS[@]}" \
+        --silent \
+        -fLO "$1" &&
+        echo "$1"
+}
+
+_curl_bg() {
+    _curl "$1"&
+}
+
+_download() {
+    _curl_bg "$1"
+    _curl_bg "$1.sha1"
+    _curl_bg "$1.sha256"
+    _curl_bg "$1.sha512"
+    _curl_bg "$1.md5"
+}
+
+IFS=":" read -r -a SPLIT <<<"$1"
+
+GROUP="${SPLIT[0]}"
+MODULE="${SPLIT[1]}"
+VERSION="${SPLIT[2]}"
+EXTRA_CLASSIFIERS="${@:2}"
+
+echo "group: ${GROUP}, module: ${module}, version: ${VERSION}"
+
+mkdir -p ".output"
+
+IFS='.' read -r -a DIRS <<<"$GROUP"
+
+(
+    cd ".output"
+
+    for DIR in "${DIRS[@]}"; do
+        mkdir -p "$DIR"
+        cd "$DIR"
+    done
+
+    mkdir -p "$MODULE"
+    cd "$MODULE"
+
+    mkdir -p "$VERSION"
+    cd "$VERSION"
+
+    BASE="$MAVEN_URL/${GROUP//[.]/\/}/$MODULE/$VERSION/$MODULE-$VERSION"
+
+    _download "$BASE.pom"
+    _download "$BASE.jar"
+    _download "$BASE-sources.jar"
+
+    for CLASSIFIER in $EXTRA_CLASSIFIERS; do
+        _download "${BASE}${CLASSIFIER}"
+    done
+
+    wait
+)

@@ -1,0 +1,5 @@
+# maven-downloader
+
+```shell
+./download
+```
